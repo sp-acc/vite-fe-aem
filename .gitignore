@@ -2,3 +2,4 @@ node_modules/
 tests/fixtures/dist*/
 tests/.parity/
 *.log
+.npmrc
