@@ -26,9 +26,15 @@ export default function clientlibs(config) {
   // clientlibs to render
   const clientLibs = {};
 
+  // category derivation: strip a leading projectKey segment (the template
+  // re-adds it) and the AEM clientlibs folder, so new clientlibs get a clean
+  // category instead of fe-build's duplicated `projectKey.projectKey....`
+  const { projectKey } = config.general;
+  const { clientlibsDir = 'clientlibs' } = config.clientlibs;
+
   // get parse to check if it has css or js or both.
   Object.keys(entries).forEach((entryKey) => {
-    const { name, folder, fileName, extension } = getClientlib(entryKey);
+    const { name, folder, fileName, extension } = getClientlib(entryKey, { projectKey, clientlibsDir });
 
     if (!clientLibs[folder]) {
       clientLibs[folder] = { name, folder };
