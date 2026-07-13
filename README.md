@@ -4,6 +4,10 @@ Vite-based frontend build tool for [AEM](https://business.adobe.com/products/exp
 
 It compiles your SCSS and JS source files and creates the appropriate [clientLibs](https://experienceleague.adobe.com/docs/experience-manager-65/developing/introduction/clientlibs.html?lang=en) resources (`css.txt`, `js.txt`, `.content.xml`) to be included by AEM.
 
+## Requirements
+
+Node.js `^20.19.0 || >=22.12.0` (matching [Vite 7](https://vite.dev/)'s supported versions).
+
 ## Getting started
 
 ```bash
@@ -18,17 +22,30 @@ Add the build task to your package.json scripts:
 }
 ```
 
-Create a `src` directory with files named `*.source.scss` / `*.source.js`, add a `.febuild` file one level up from the source directory:
+Then:
 
-```javascript
-module.exports = {};
-```
+1. Create a `src` directory and name your source files `*.source.scss` / `*.source.js`, for example:
 
-and run:
+   ```
+   my-project/
+   ├─ package.json
+   └─ src/
+      └─ author/
+         ├─ author.source.js
+         └─ author.source.scss
+   ```
 
-```bash
-npm run build
-```
+2. Optionally add a `.febuild` config at your project root (alongside `src/`) to override defaults — without one, the tool runs its default configuration:
+
+   ```javascript
+   module.exports = {};
+   ```
+
+3. Run the build:
+
+   ```bash
+   npm run build
+   ```
 
 ## Migrating from @netcentric/fe-build
 
