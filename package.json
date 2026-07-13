@@ -1,0 +1,49 @@
+{
+  "name": "vite-aem-fe-build",
+  "version": "0.1.0",
+  "description": "Vite-based frontend build tool for AEM projects. Drop-in replacement for @netcentric/fe-build.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/sp-acc/vite-aem-fe-build.git"
+  },
+  "bin": {
+    "vite-aem-fe-build": "bin/index.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "docs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "clean": "rm -rf ./tests/fixtures/dist* ./tests/.parity",
+    "test": "npm run clean && vitest run",
+    "parity": "node scripts/parity.mjs"
+  },
+  "keywords": [
+    "aem",
+    "vite",
+    "build",
+    "clientlibs"
+  ],
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
+  },
+  "dependencies": {
+    "autoprefixer": "^10.4.20",
+    "chokidar": "^4.0.3",
+    "eslint": "^9.0.0",
+    "fast-glob": "^3.3.3",
+    "postcss": "^8.5.1",
+    "sass": "^1.83.4",
+    "stylelint": "^16.14.1",
+    "vite": "^7.0.0"
+  },
+  "devDependencies": {
+    "stylelint-config-standard-scss": "^14.0.0",
+    "vitest": "^3.0.0"
+  }
+}

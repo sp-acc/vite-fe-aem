@@ -1,0 +1,5 @@
+{
+  "name": "fixtures",
+  "private": true,
+  "description": "Simulates a CJS consumer project (no \"type\" field = CommonJS default) so .febuild.js / stylelint.config.js load like they would in the wild"
+}

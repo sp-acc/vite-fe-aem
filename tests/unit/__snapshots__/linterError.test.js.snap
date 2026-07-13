@@ -1,0 +1,8 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Test utils/linterError.js > Check formating of a error send to console log 1`] = `
+"[2m[src/utils/linterError.js] [0m[31m✖  [0m[31m
+    my error[0m[0m
+    [2mLintError at <source>:12:10 
+[0m[0m[2m[0m"
+`;
