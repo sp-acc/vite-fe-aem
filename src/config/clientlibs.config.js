@@ -28,7 +28,10 @@ const clientlibsDir = 'clientlibs';
 const categoryDerivation = 'fe-build';
 
 // fe-build compatibility: webpack split chunks do not exist in the vite build,
-// the clientlibs task warns and ignores this flag when set
+// the clientlibs task warns and ignores this flag when set (unless `vendors`
+// below is configured - then the replacement is already active and the
+// warning is skipped). `vendors` is the opt-in: its clientlib metadata is
+// always generated when it is configured.
 const generateSplitChunksClientlibs = false;
 
 // shared vendors clientlib, off by default. Set to restore fe-build's

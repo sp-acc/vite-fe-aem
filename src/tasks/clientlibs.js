@@ -46,20 +46,21 @@ export default function clientlibs(config) {
     clientLibs[folder][extension] = fileName;
   });
 
+  // the shared vendors clientlib gets an explicit category (not folder-derived)
+  // and is rendered through the same path as the entries
+  const vendors = parseVendorsConfig(config);
+
   // fe-build compatibility: the vite build emits self-contained bundles, there
-  // are no webpack split chunks to describe
+  // are no webpack split chunks to describe. Configuring `vendors` is the
+  // replacement, so the warning only makes sense when it is not in use.
   const { generateSplitChunksClientlibs = false } = config.clientlibs;
 
-  if (generateSplitChunksClientlibs) {
+  if (generateSplitChunksClientlibs && !vendors) {
     warnIgnored(
       'clientlibs.generateSplitChunksClientlibs',
       'every entry is a self-contained bundle, no split chunk clientlibs are generated - use clientlibs.vendors instead'
     );
   }
-
-  // the shared vendors clientlib gets an explicit category (not folder-derived)
-  // and is rendered through the same path as the entries
-  const vendors = parseVendorsConfig(config);
 
   if (vendors) {
     const folder = path.dirname(vendors.output);

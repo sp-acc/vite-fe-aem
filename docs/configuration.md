@@ -263,8 +263,9 @@ module.exports = {
     categoryDerivation: 'fe-build',
 
     // fe-build webpack split-chunk flag — no split chunks exist in the vite
-    // build, so this is accepted, warned about once, and ignored. Use
-    // `vendors` below to restore the vendor-sharing capability instead.
+    // build, so this is accepted, warned about once, and ignored. Configure
+    // `vendors` below to restore the vendor-sharing capability instead; the
+    // warning is skipped when `vendors` is set.
     generateSplitChunksClientlibs: false,
 
     // Shared vendors clientlib, off by default (see "Shared vendors
@@ -325,6 +326,10 @@ module.exports = {
 ```
 
 Defaults: `category: 'commons'`, `output: commons/vendors.<bundleKey>.js`.
+
+This replaces fe-build's `clientlibs.generateSplitChunksClientlibs`: configuring
+`vendors` at all is the opt-in, so its clientlib metadata is always generated.
+The old flag stays a warned no-op and is harmless alongside `vendors`.
 
 **Load order is your responsibility** — the same obligation fe-build's commons
 chunks had: the vendors clientlib category must load before the clientlibs
