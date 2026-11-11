@@ -1,0 +1,20 @@
+const path = require('path');
+
+module.exports = function () {
+  const rootPath = __dirname;
+  const sourcesPath = path.join(rootPath, 'src');
+
+  return {
+    general: {
+      projectKey: 'febuild',
+      rootPath,
+      sourcesPath,
+      destinationPath: path.join(rootPath, 'dist'),
+      common: path.join(sourcesPath, 'common'),
+      sourceKey: 'src',
+      bundleKey: 'dist',
+    },
+    // page-provided global: keeps jquery out of the bundle in both tools
+    externals: { jquery: 'jQuery' },
+  };
+};

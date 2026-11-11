@@ -17,20 +17,38 @@ describe('Test utils/getClientlib.js', () => {
     expect(clientlib.extension).toBe(extension);
   });
 
-  it('Strips a leading projectKey segment and the clientlibs folder from the category, but keeps folder intact', () => {
+  it('Defaults to fe-build derivation: joins every folder segment verbatim', () => {
     const folder = ['batcom', 'base', 'clientlibs', 'author', 'components', 'batcom-agegate'].join(path.sep);
     const location = `${folder}${path.sep}batcom-agegate.bundle.js`;
     const clientlib = getClientlib(location, { projectKey: 'batcom', clientlibsDir: 'clientlibs' });
+    // byte-identical to webpack fe-build (incl. its duplication quirk);
+    // the template re-adds the projectKey prefix
+    expect(clientlib.name).toBe('batcom.base.clientlibs.author.components.batcom-agegate');
+    // physical output folder is untouched (that is where .content.xml is written)
+    expect(clientlib.folder).toBe(folder);
+  });
+
+  it('Is verbatim even when no options are passed at all', () => {
+    const folder = ['batcom', 'base', 'clientlibs', 'author'].join(path.sep);
+    const location = `${folder}${path.sep}agegate.bundle.js`;
+    const clientlib = getClientlib(location);
+    expect(clientlib.name).toBe('batcom.base.clientlibs.author');
+  });
+
+  it('With categoryDerivation clean, strips a leading projectKey segment and the clientlibs folder, but keeps folder intact', () => {
+    const folder = ['batcom', 'base', 'clientlibs', 'author', 'components', 'batcom-agegate'].join(path.sep);
+    const location = `${folder}${path.sep}batcom-agegate.bundle.js`;
+    const clientlib = getClientlib(location, { projectKey: 'batcom', clientlibsDir: 'clientlibs', categoryDerivation: 'clean' });
     // template re-adds projectKey, so name omits it -> batcom.base.author.components.batcom-agegate
     expect(clientlib.name).toBe('base.author.components.batcom-agegate');
     // physical output folder is untouched (that is where .content.xml is written)
     expect(clientlib.folder).toBe(folder);
   });
 
-  it('Keeps a non-projectKey module segment such as brands', () => {
+  it('With categoryDerivation clean, keeps a non-projectKey module segment such as brands', () => {
     const folder = ['batcom', 'brands', 'clientlibs', 'corp'].join(path.sep);
     const location = `${folder}${path.sep}corp.bundle.css`;
-    const clientlib = getClientlib(location, { projectKey: 'batcom', clientlibsDir: 'clientlibs' });
+    const clientlib = getClientlib(location, { projectKey: 'batcom', clientlibsDir: 'clientlibs', categoryDerivation: 'clean' });
     expect(clientlib.name).toBe('brands.corp');
   });
 

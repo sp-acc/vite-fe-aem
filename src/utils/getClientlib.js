@@ -1,24 +1,31 @@
 import path from 'node:path';
 
-// Derive the clientlib category from the folder path.
+// Category derivation modes:
 //
-// fe-build joined every folder segment verbatim and let the template prepend
-// projectKey, which for projects whose sources live under a folder named after
-// the projectKey (e.g. `batcom/base/clientlibs/...` with projectKey `batcom`)
-// produced a duplicated, verbose category like
-// `batcom.batcom.base.clientlibs.author.components.foo`.
+// - 'fe-build' (default): joins every folder segment verbatim, byte-identical
+//   to webpack fe-build, so AEM policies/templates referencing existing
+//   categories keep working after migration.
 //
-// We drop a leading segment equal to projectKey (the template re-adds it) and
-// the AEM `clientlibs` folder segment, yielding `batcom.base.author.components.foo`.
-function deriveName(folder, { projectKey, clientlibsDir } = {}) {
+// - 'clean': drops a leading segment equal to projectKey (the template re-adds
+//   it) and the AEM `clientlibs` folder segment, so projects whose sources live
+//   under a folder named after the projectKey (e.g. `batcom/base/clientlibs/…`
+//   with projectKey `batcom`) get a readable category like
+//   `batcom.base.author.components.foo` instead of fe-build's duplicated
+//   `batcom.batcom.base.clientlibs.author.components.foo`.
+//
+// The physical output folder (where .content.xml is written) is unaffected in
+// both modes; only the category string differs.
+function deriveName(folder, { projectKey, clientlibsDir, categoryDerivation = 'fe-build' } = {}) {
   let segments = folder.split(path.sep).filter(Boolean);
 
-  if (projectKey && segments[0] === projectKey) {
-    segments = segments.slice(1);
-  }
+  if (categoryDerivation === 'clean') {
+    if (projectKey && segments[0] === projectKey) {
+      segments = segments.slice(1);
+    }
 
-  if (clientlibsDir) {
-    segments = segments.filter(segment => segment !== clientlibsDir);
+    if (clientlibsDir) {
+      segments = segments.filter(segment => segment !== clientlibsDir);
+    }
   }
 
   return segments.join('.');

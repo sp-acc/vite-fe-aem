@@ -250,13 +250,26 @@ module.exports = {
     // Generate clientlibs for extra generated files.
     extraEntries: {},
 
-    // AEM clientlibs folder segment stripped from generated categories
-    // (see "Category derivation" below).
+    // AEM clientlibs folder segment stripped from generated categories when
+    // categoryDerivation is 'clean' (see "Category derivation" below).
     clientlibsDir: 'clientlibs',
 
+    // How the category is derived from the output folder path.
+    //   'fe-build' (default): every folder segment joined verbatim —
+    //     byte-identical to webpack fe-build categories.
+    //   'clean': strips a leading projectKey segment and the clientlibsDir
+    //     segment for a readable category. Update AEM policies/templates
+    //     referencing the old categories when opting in.
+    categoryDerivation: 'fe-build',
+
     // fe-build webpack split-chunk flag — no split chunks exist in the vite
-    // build, so this is accepted, warned about once, and ignored.
+    // build, so this is accepted, warned about once, and ignored. Use
+    // `vendors` below to restore the vendor-sharing capability instead.
     generateSplitChunksClientlibs: false,
+
+    // Shared vendors clientlib, off by default (see "Shared vendors
+    // clientlib" below).
+    vendors: null,
   }
 };
 ```
@@ -264,17 +277,68 @@ module.exports = {
 ### Category derivation
 
 The category written to `.content.xml` is derived from the clientlib's folder
-path, then prefixed with `general.projectKey` by the template. To avoid the
-duplicated `projectKey.projectKey…` categories fe-build produced for projects
-whose sources live under a folder named after the projectKey, the build:
+path, then prefixed with `general.projectKey` by the template. Two modes exist
+via `clientlibs.categoryDerivation`:
 
-1. drops a **leading** path segment equal to `projectKey` (the template re-adds it), and
-2. drops any segment equal to `clientlibsDir`.
+- **`'fe-build'` (default)** — every folder segment is joined verbatim, so the
+  category matches webpack fe-build **byte-for-byte**, including its
+  duplication quirk: `batcom/base/clientlibs/author/components/agegate` with
+  `projectKey: 'batcom'` yields `batcom.batcom.base.clientlibs.author.components.agegate`.
+  Existing AEM policies/templates keep working unchanged after migrating.
+- **`'clean'`** — drops a **leading** path segment equal to `projectKey` (the
+  template re-adds it) and any segment equal to `clientlibsDir`, yielding
+  `batcom.base.author.components.agegate`. Nicer, but different: update the
+  category references in your AEM policies/templates when opting in.
 
-So `batcom/base/clientlibs/author/components/agegate` with
-`projectKey: 'batcom'` yields category `batcom.base.author.components.agegate`.
-The physical output folder (where `.content.xml` is written) is unchanged; only
-the category string is cleaned.
+The physical output folder (where `.content.xml` is written) is unchanged in
+both modes; only the category string differs.
+
+### Shared vendors clientlib (`vendors`)
+
+Restores fe-build's splitChunks vendor sharing without webpack. By default
+every entry is a self-contained IIFE, so a library imported by N clientlibs is
+bundled N times. With `clientlibs.vendors` configured, the build instead:
+
+1. Builds **one** vendors bundle — a self-contained IIFE importing every
+   configured module and exposing it on `window` under its global name.
+2. Auto-externalizes those modules in **every regular entry** — they reference
+   the window globals instead of bundling the code.
+3. Renders the clientlib metadata (`.content.xml` + `js.txt`) for the vendors
+   bundle, exactly like an entry clientlib.
+
+```javascript
+module.exports = {
+  clientlibs: {
+    vendors: {
+      // required — module specifier -> window global (same shape as `externals`)
+      modules: { jquery: 'jQuery', lodash: '_' },
+
+      // clientlib category; rendered as "<projectKey>.<category>"
+      category: 'commons',
+
+      // dist path of the vendors bundle; default mirrors fe-build's
+      // splitChunks location
+      output: 'commons/vendors.dist.js',
+    }
+  }
+};
+```
+
+Defaults: `category: 'commons'`, `output: commons/vendors.<bundleKey>.js`.
+
+**Load order is your responsibility** — the same obligation fe-build's commons
+chunks had: the vendors clientlib category must load before the clientlibs
+that reference its globals (page policy ordering, embed, or explicit
+dependency in the consuming clientlib's `.content.xml`).
+
+The vendors bundle is a build-time virtual module — no `vendor.js` source file
+is needed in your project. Modules must resolve at build time (node_modules or
+your configured `resolve` aliases/dirs), and only default exports are exposed
+(`import jquery from 'jquery'` interop). The auto-externalization composes
+with a top-level `externals` config; if the two map a module to different
+globals, the vendors mapping wins (warned). If `output` lands in a folder that
+an entry clientlib already occupies, the vendors metadata is skipped with a
+warning.
 
 ## `templates`
 
@@ -290,17 +354,43 @@ module.exports = {
 
 ## `resolve`
 
-Import aliases, passed through to vite's `resolve.alias`.
+Import aliases and module directories.
 
 ```javascript
 module.exports = {
   resolve: {
     alias: {
       utils: '<common>/utils',
-    }
+    },
+    // Bare imports are also resolved against these directories, like
+    // webpack's resolve.modules. `node_modules` needs no entry — it is
+    // always searched.
+    modules: ['<rootPath>/node_modules'],
   }
 };
 ```
+
+## `externals`
+
+Keeps dependencies out of the bundle and references a global instead — the
+standard AEM pattern for libraries the page already provides (jQuery etc.).
+Same semantics as fe-build; only the object form is supported.
+
+```javascript
+module.exports = {
+  externals: {
+    jquery: 'jQuery',
+  }
+};
+```
+
+With this config, `import $ from 'jquery'` compiles to a reference to the
+`window.jQuery` global instead of bundling the library. Other webpack
+externals forms (string/array/regex/function) are warned about and ignored.
+
+Use [`clientlibs.vendors`](#shared-vendors-clientlib-vendors) when you want the
+build to also produce the clientlib that serves those globals, instead of
+providing them yourself (CDN, another clientlib, AEM).
 
 ---
 
@@ -312,7 +402,7 @@ These are set per-invocation, not in `.febuild`. They flow into `general`:
 |---|---|
 | `--development` | Development mode (also `NODE_ENV=development`); expanded CSS, inline sourcemaps. |
 | `--watch` | Rebuild on source changes. |
-| `--analyze` | Emit a bundle analysis report. |
+| `--analyze` | Not supported yet (warned about and ignored). |
 | `--port=<n>` | Analyzer port (default `8888`). |
 | `--task=<name>` | Run a single task (`styles`, `scripts`, `clientlibs`). `webpack` is an alias for `scripts`. |
 | `--config-file=<path>` | Use a specific `.febuild` instead of globbing for them. |

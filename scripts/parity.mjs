@@ -2,12 +2,18 @@
 /**
  * Drop-in parity check against @netcentric/fe-build.
  *
- * Copies the test fixtures twice, builds one copy with fe-build (webpack)
+ * Copies each scenario fixture twice, builds one copy with fe-build (webpack)
  * and one with this tool (vite), then compares the dist trees:
  *   - file sets must match, except an allowlist of expected webpack-only files
  *   - css.txt / js.txt / .content.xml must be byte-identical
  *   - .css files must be byte-identical (sourcemap comments stripped)
  *   - .js bundles must exist, be non-empty and classic-script safe
+ *
+ * Scenarios:
+ *   - main: the standard test fixtures
+ *   - category+externals: sources under a projectKey/clientlibs folder
+ *     (category derivation must match fe-build byte-for-byte) and a
+ *     `jquery` import resolved via `externals` (page global reference)
  *
  * fe-build is looked up at $FE_BUILD_HOME or ../ (the nested-repo layout);
  * the check is skipped with a notice when it is not available.
@@ -18,7 +24,6 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const FIXTURES = path.join(ROOT, 'tests', 'fixtures');
 const PARITY = path.join(ROOT, 'tests', '.parity');
 
 // files fe-build emits that this tool intentionally does not (self-contained
@@ -62,11 +67,11 @@ function stripSourcemapComments(css) {
   return css.replace(/\/\*#\s*sourceMappingURL=[^*]*\*\/\s*$/g, '').trimEnd();
 }
 
-function setupCopy(name) {
+function setupCopy(name, fixtureDir) {
   const target = path.join(PARITY, name);
   fs.rmSync(target, { recursive: true, force: true });
   fs.mkdirSync(target, { recursive: true });
-  fs.cpSync(FIXTURES, target, { recursive: true });
+  fs.cpSync(fixtureDir, target, { recursive: true });
   // discovery mode must only find the top-level .febuild pair once per tool
   return target;
 }
@@ -90,6 +95,71 @@ function linkFeBuildNodeModules(feBuildCli, cwd) {
   fs.symlinkSync(feBuildNodeModules, target, 'dir');
 }
 
+function compareTrees(label, webpackDist, viteDist, { expectGlobalsInBundles = [] }) {
+  const webpackFiles = listFiles(webpackDist);
+  const viteFiles = listFiles(viteDist);
+  const failures = [];
+
+  // 1. file tree comparison
+  const onlyWebpack = webpackFiles.filter(f => !viteFiles.includes(f));
+  const onlyVite = viteFiles.filter(f => !webpackFiles.includes(f));
+
+  for (const file of onlyWebpack) {
+    if (!EXPECTED_ONLY_IN_WEBPACK.some(rx => rx.test(file))) {
+      failures.push(`missing in vite dist: ${file}`);
+    }
+  }
+
+  for (const file of onlyVite) {
+    failures.push(`unexpected extra file in vite dist: ${file}`);
+  }
+
+  // 2. clientlib metadata must be byte-identical
+  // 3. css must be byte-identical modulo sourcemap comments
+  for (const file of webpackFiles.filter(f => viteFiles.includes(f))) {
+    const a = fs.readFileSync(path.join(webpackDist, file));
+    const b = fs.readFileSync(path.join(viteDist, file));
+
+    if (/(?:css|js)\.txt$|\.content\.xml$/.test(file)) {
+      if (!a.equals(b)) failures.push(`clientlib metadata differs: ${file}`);
+    } else if (file.endsWith('.css')) {
+      if (stripSourcemapComments(a.toString()) !== stripSourcemapComments(b.toString())) {
+        failures.push(`css output differs: ${file}`);
+      }
+    } else if (file.endsWith('.js')) {
+      const content = b.toString();
+      if (content.length === 0) failures.push(`empty js bundle: ${file}`);
+      if (/^\s*(?:import|export)[\s{"']/m.test(content)) {
+        failures.push(`js bundle is not classic-script safe: ${file}`);
+      }
+      for (const globalName of expectGlobalsInBundles) {
+        if (!content.includes(globalName)) {
+          failures.push(`js bundle does not reference external global ${globalName}: ${file}`);
+        }
+      }
+    }
+  }
+
+  console.log(`[parity:${label}] compared ${webpackFiles.length} webpack files vs ${viteFiles.length} vite files`);
+  console.log(`[parity:${label}] webpack-only files (expected): ${onlyWebpack.filter(f => EXPECTED_ONLY_IN_WEBPACK.some(rx => rx.test(f))).join(', ') || 'none'}`);
+
+  return failures;
+}
+
+function runScenario(feBuildCli, { label, fixtureDir, expectGlobalsInBundles }) {
+  console.log(`[parity:${label}] scenario: ${fixtureDir}`);
+
+  const webpackDir = setupCopy('webpack', fixtureDir);
+  const viteDir = setupCopy('vite', fixtureDir);
+
+  linkFeBuildNodeModules(feBuildCli, webpackDir);
+
+  build('@netcentric/fe-build (webpack)', feBuildCli, webpackDir);
+  build('vite-aem-fe-build (vite)', path.join(ROOT, 'bin', 'index.js'), viteDir);
+
+  return compareTrees(label, path.join(webpackDir, 'dist'), path.join(viteDir, 'dist'), { expectGlobalsInBundles });
+}
+
 const feBuildCli = findFeBuild();
 
 if (!feBuildCli) {
@@ -97,59 +167,18 @@ if (!feBuildCli) {
   process.exit(0);
 }
 
-const webpackDir = setupCopy('webpack');
-const viteDir = setupCopy('vite');
-
-linkFeBuildNodeModules(feBuildCli, webpackDir);
-
-build('@netcentric/fe-build (webpack)', feBuildCli, webpackDir);
-build('vite-aem-fe-build (vite)', path.join(ROOT, 'bin', 'index.js'), viteDir);
-
-const webpackDist = path.join(webpackDir, 'dist');
-const viteDist = path.join(viteDir, 'dist');
-
-const webpackFiles = listFiles(webpackDist);
-const viteFiles = listFiles(viteDist);
-
-const failures = [];
-
-// 1. file tree comparison
-const onlyWebpack = webpackFiles.filter(f => !viteFiles.includes(f));
-const onlyVite = viteFiles.filter(f => !webpackFiles.includes(f));
-
-for (const file of onlyWebpack) {
-  if (!EXPECTED_ONLY_IN_WEBPACK.some(rx => rx.test(file))) {
-    failures.push(`missing in vite dist: ${file}`);
-  }
-}
-
-for (const file of onlyVite) {
-  failures.push(`unexpected extra file in vite dist: ${file}`);
-}
-
-// 2. clientlib metadata must be byte-identical
-// 3. css must be byte-identical modulo sourcemap comments
-for (const file of webpackFiles.filter(f => viteFiles.includes(f))) {
-  const a = fs.readFileSync(path.join(webpackDist, file));
-  const b = fs.readFileSync(path.join(viteDist, file));
-
-  if (/(?:css|js)\.txt$|\.content\.xml$/.test(file)) {
-    if (!a.equals(b)) failures.push(`clientlib metadata differs: ${file}`);
-  } else if (file.endsWith('.css')) {
-    if (stripSourcemapComments(a.toString()) !== stripSourcemapComments(b.toString())) {
-      failures.push(`css output differs: ${file}`);
-    }
-  } else if (file.endsWith('.js')) {
-    const content = b.toString();
-    if (content.length === 0) failures.push(`empty js bundle: ${file}`);
-    if (/^\s*(?:import|export)[\s{"']/m.test(content)) {
-      failures.push(`js bundle is not classic-script safe: ${file}`);
-    }
-  }
-}
-
-console.log(`[parity] compared ${webpackFiles.length} webpack files vs ${viteFiles.length} vite files`);
-console.log(`[parity] webpack-only files (expected): ${onlyWebpack.filter(f => EXPECTED_ONLY_IN_WEBPACK.some(rx => rx.test(f))).join(', ') || 'none'}`);
+const failures = [
+  ...runScenario(feBuildCli, {
+    label: 'main',
+    fixtureDir: path.join(ROOT, 'tests', 'fixtures'),
+    expectGlobalsInBundles: [],
+  }),
+  ...runScenario(feBuildCli, {
+    label: 'category+externals',
+    fixtureDir: path.join(ROOT, 'tests', 'parity-case'),
+    expectGlobalsInBundles: ['jQuery'],
+  }),
+];
 
 if (failures.length > 0) {
   console.error('\n[parity] FAILED:');

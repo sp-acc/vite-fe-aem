@@ -43,6 +43,7 @@
     "vite": "^7.0.0"
   },
   "devDependencies": {
+    "jquery": "^3.7.1",
     "stylelint-config-standard-scss": "^14.0.0",
     "vitest": "^3.0.0"
   }

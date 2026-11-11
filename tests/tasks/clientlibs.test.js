@@ -120,6 +120,115 @@ describe('clientlibs with array sourceKey + sourceKeyAsDistFolder [fixtures/src-
   });
 });
 
+// -- category derivation: default 'fe-build' reproduces webpack categories
+// byte-for-byte, including the projectKey duplication quirk
+const cfgCategory = extendConfig(FEBUILD, defaults);
+cfgCategory.general.sourcesPath = path.resolve('tests/fixtures/src-category');
+cfgCategory.general.destinationPath = path.resolve('tests/fixtures/dist-category');
+
+describe('clientlibs category derivation defaults to fe-build', () => {
+  beforeAll(async () => {
+    await clientlibTask(cfgCategory);
+  });
+
+  const contentXml = path.join(cfgCategory.general.destinationPath, 'febuild', 'base', 'clientlibs', 'author', 'components', 'hero', '.content.xml');
+
+  it('Emits .content.xml in the physical output folder', () => {
+    expect(fs.existsSync(contentXml)).toBe(true);
+  });
+
+  it('Category matches fe-build byte-for-byte (projectKey duplication kept)', () => {
+    const content = fs.readFileSync(contentXml, 'utf8');
+    expect(content).toContain('categories="[febuild.febuild.base.clientlibs.author.components.hero]"');
+  });
+
+  it('js.txt / css.txt point at the bundle regardless of derivation', () => {
+    const dir = path.dirname(contentXml);
+    expect(fs.readFileSync(path.join(dir, 'js.txt'), 'utf8')).toBe('hero.dist.js');
+    expect(fs.readFileSync(path.join(dir, 'css.txt'), 'utf8')).toBe('hero.dist.css');
+  });
+});
+
+// -- opt-in clean derivation strips projectKey and clientlibs segments
+const cfgCategoryClean = extendConfig(FEBUILD, defaults);
+cfgCategoryClean.general.sourcesPath = path.resolve('tests/fixtures/src-category');
+cfgCategoryClean.general.destinationPath = path.resolve('tests/fixtures/dist-category-clean');
+cfgCategoryClean.clientlibs.categoryDerivation = 'clean';
+
+describe('clientlibs categoryDerivation clean', () => {
+  beforeAll(async () => {
+    await clientlibTask(cfgCategoryClean);
+  });
+
+  it('Strips the leading projectKey and the clientlibs folder from the category', () => {
+    const contentXml = path.join(cfgCategoryClean.general.destinationPath, 'febuild', 'base', 'clientlibs', 'author', 'components', 'hero', '.content.xml');
+    const content = fs.readFileSync(contentXml, 'utf8');
+    expect(content).toContain('categories="[febuild.base.author.components.hero]"');
+  });
+});
+
+// -- clientlibs.vendors: metadata for the shared vendors clientlib.
+// The scripts task builds commons/vendors.dist.js; the clientlibs task renders
+// its .content.xml (explicit category, not folder-derived) and js.txt.
+const cfgVendors = extendConfig(FEBUILD, defaults);
+cfgVendors.general.sourcesPath = path.resolve('tests/fixtures/src-vendors');
+cfgVendors.general.destinationPath = path.resolve('tests/fixtures/dist-vendors-clientlibs');
+cfgVendors.clientlibs.vendors = { modules: { jquery: 'jQuery' } };
+
+describe('clientlibs with clientlibs.vendors', () => {
+  beforeAll(async () => {
+    await clientlibTask(cfgVendors);
+  });
+
+  const commonsDir = path.join(cfgVendors.general.destinationPath, 'commons');
+
+  it('Renders .content.xml with the projectKey-prefixed category', () => {
+    const content = fs.readFileSync(path.join(commonsDir, '.content.xml'), 'utf8');
+    expect(content).toContain('categories="[febuild.commons]"');
+  });
+
+  it('js.txt points at the vendors bundle', () => {
+    expect(fs.readFileSync(path.join(commonsDir, 'js.txt'), 'utf8')).toBe('vendors.dist.js');
+  });
+
+  it('Honors an explicit category', async () => {
+    const cfgCustom = extendConfig(FEBUILD, defaults);
+    cfgCustom.general.sourcesPath = path.resolve('tests/fixtures/src-vendors');
+    cfgCustom.general.destinationPath = path.resolve('tests/fixtures/dist-vendors-clientlibs-custom');
+    cfgCustom.clientlibs.vendors = { modules: { jquery: 'jQuery' }, category: 'sharedlibs' };
+    await clientlibTask(cfgCustom);
+
+    const content = fs.readFileSync(
+      path.join(cfgCustom.general.destinationPath, 'commons', '.content.xml'),
+      'utf8'
+    );
+    expect(content).toContain('categories="[febuild.sharedlibs]"');
+  });
+});
+
+// -- clientlibs.vendors folder collision with an entry clientlib folder is warned about
+const cfgVendorsCollision = extendConfig(FEBUILD, defaults);
+cfgVendorsCollision.general.sourcesPath = path.resolve('tests/fixtures/src-vendors');
+cfgVendorsCollision.general.destinationPath = path.resolve('tests/fixtures/dist-vendors-collision');
+// the fixture entry lives in app/, so point the vendors clientlib there
+cfgVendorsCollision.clientlibs.vendors = { modules: { jquery: 'jQuery' }, output: 'app/vendors.dist.js' };
+
+describe('clientlibs.vendors output folder collision', () => {
+  beforeAll(async () => {
+    await clientlibTask(cfgVendorsCollision);
+  });
+
+  it('Skips the vendors metadata and keeps the entry clientlib intact', () => {
+    const base = cfgVendorsCollision.general.destinationPath;
+    // entry metadata for app/ still there…
+    expect(fs.readFileSync(path.join(base, 'app', 'js.txt'), 'utf8')).toBe('app.dist.js');
+    // …and no vendors js.txt overwrote it (only one js.txt for the folder)
+    expect(fs.readdirSync(path.join(base, 'app')).filter(f => f === '.content.xml').length).toBe(1);
+    expect(fs.readFileSync(path.join(base, 'app', '.content.xml'), 'utf8'))
+      .toContain('categories="[febuild.app]"');
+  });
+});
+
 // -- generateSplitChunksClientlibs is accepted but a no-op (vite bundles are self-contained)
 const cfgSplitChunks = extendConfig(FEBUILD, defaults);
 cfgSplitChunks.general.destinationPath = path.resolve('tests/fixtures/dist-splitchunks');
